@@ -1,6 +1,6 @@
 'use strict';
 
-const { mapApprovalToEvent, buildReviewBody, buildReviewComments } = require('../src/github-poster');
+const { mapApprovalToEvent, buildReviewBody, buildReviewComments, buildImpactBanner } = require('../src/github-poster');
 
 describe('mapApprovalToEvent', () => {
   test('maps approve to APPROVE', () => {
@@ -70,6 +70,86 @@ describe('buildReviewBody', () => {
     expect(body).not.toContain('Critical');
     expect(body).not.toContain('Warning');
     expect(body).toContain('Suggestion | 1');
+  });
+});
+
+describe('buildReviewBody with platformImpact', () => {
+  test('includes impact banner for critical level', () => {
+    const body = buildReviewBody(
+      { summary: 'Auth changes found.', comments: [] },
+      { level: 'critical', affectsAuth: true, affectsMiddleware: false, affectsSchema: false, affectsData: false, affectsRoutes: false, affectsDependencies: false }
+    );
+    expect(body).toContain('Platform Impact: CRITICAL');
+    expect(body).toContain('Authentication');
+  });
+
+  test('includes impact banner for high level', () => {
+    const body = buildReviewBody(
+      { summary: 'Data changes.', comments: [] },
+      { level: 'high', affectsAuth: false, affectsMiddleware: false, affectsSchema: false, affectsData: true, affectsRoutes: true, affectsDependencies: false }
+    );
+    expect(body).toContain('Platform Impact: HIGH');
+    expect(body).toContain('Data Sources');
+    expect(body).toContain('API Routes');
+  });
+
+  test('no banner for low impact', () => {
+    const body = buildReviewBody(
+      { summary: 'All good.', comments: [] },
+      { level: 'low', affectsAuth: false, affectsMiddleware: false, affectsSchema: false, affectsData: false, affectsRoutes: false, affectsDependencies: false }
+    );
+    expect(body).not.toContain('Platform Impact');
+  });
+
+  test('no banner when platformImpact is undefined', () => {
+    const body = buildReviewBody({ summary: 'All good.', comments: [] });
+    expect(body).not.toContain('Platform Impact');
+  });
+});
+
+describe('buildImpactBanner', () => {
+  test('critical banner uses alarm emoji', () => {
+    const banner = buildImpactBanner({
+      level: 'critical',
+      affectsAuth: true,
+      affectsMiddleware: true,
+      affectsSchema: false,
+      affectsData: false,
+      affectsRoutes: false,
+      affectsDependencies: false
+    });
+    expect(banner).toContain('🚨');
+    expect(banner).toContain('CRITICAL');
+    expect(banner).toContain('Authentication');
+    expect(banner).toContain('Middleware');
+  });
+
+  test('high banner uses warning emoji', () => {
+    const banner = buildImpactBanner({
+      level: 'high',
+      affectsAuth: false,
+      affectsMiddleware: false,
+      affectsSchema: false,
+      affectsData: true,
+      affectsRoutes: false,
+      affectsDependencies: false
+    });
+    expect(banner).toContain('⚠️');
+    expect(banner).toContain('HIGH');
+  });
+
+  test('medium banner uses info emoji', () => {
+    const banner = buildImpactBanner({
+      level: 'medium',
+      affectsAuth: false,
+      affectsMiddleware: false,
+      affectsSchema: false,
+      affectsData: false,
+      affectsRoutes: true,
+      affectsDependencies: false
+    });
+    expect(banner).toContain('ℹ️');
+    expect(banner).toContain('MEDIUM');
   });
 });
 

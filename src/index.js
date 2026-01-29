@@ -6,6 +6,8 @@ const { truncateDiff, formatDiffForPrompt, estimateTokens, isSecurityFile } = re
 const { reviewWithClaude, triageFiles } = require('./claude-reviewer');
 const { postReview } = require('./github-poster');
 const { scorePRComplexity, recommendModel } = require('./complexity-scorer');
+const { assessPlatformImpact } = require('./platform-impact');
+const { generateTestSuggestions } = require('./test-suggestions');
 const { MODELS, MODEL_PRICING, SECURITY_SENSITIVE_PATTERNS } = require('./constants');
 
 const MIN_CHANGES_THRESHOLD = 5;
@@ -64,8 +66,12 @@ async function run() {
 
   console.log(`Found ${reviewableFiles.length} reviewable file(s) with ${totalChanges} total changes`);
 
+  // --- Platform impact assessment (deterministic, no LLM call) ---
+  const platformImpact = assessPlatformImpact(reviewableFiles, repo);
+  console.log(`Platform impact: ${platformImpact.level}`);
+
   // --- Complexity scoring & adaptive model selection ---
-  const complexityScore = scorePRComplexity({ files: reviewableFiles, prTitle, prBody });
+  const complexityScore = scorePRComplexity({ files: reviewableFiles, prTitle, prBody, platformImpact });
   console.log(`Complexity score: ${complexityScore}/100`);
 
   let selectedModel;
@@ -161,12 +167,20 @@ async function run() {
     model: selectedModel,
     enableThinking,
     complexityScore,
-    fullFileContext: fullFileContext || undefined
+    fullFileContext: fullFileContext || undefined,
+    platformImpact
   });
 
   console.log(`Claude response: ${review.approval} (${review.comments.length} comments)`);
   console.log(`Model used: ${review.model}${review.thinkingEnabled ? ' (with extended thinking)' : ''}`);
   console.log(`Token usage: ${review.usage.inputTokens} input, ${review.usage.outputTokens} output`);
+
+  // --- Test suggestions (post-processing, no LLM call) ---
+  const testSuggestions = generateTestSuggestions(reviewableFiles, platformImpact, repo, review.comments);
+  if (testSuggestions.length > 0) {
+    review.comments = [...review.comments, ...testSuggestions];
+    console.log(`Added ${testSuggestions.length} test suggestion(s)`);
+  }
 
   // Post the review to GitHub (shared octokit, with duplicate check)
   const result = await postReview({
@@ -176,7 +190,8 @@ async function run() {
     prNumber,
     review,
     reviewMode,
-    diffFiles: reviewableFiles
+    diffFiles: reviewableFiles,
+    platformImpact
   });
 
   if (result.event === 'SKIPPED') {

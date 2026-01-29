@@ -307,6 +307,64 @@ describe('shouldEnableThinking', () => {
   });
 });
 
+describe('buildUserPrompt with platformImpact', () => {
+  test('includes platform impact section when provided with summary', () => {
+    const prompt = buildUserPrompt({
+      standards: '',
+      diff: '+line',
+      prTitle: 'Fix auth',
+      prBody: '',
+      prBase: 'master',
+      repoName: 'fliplet-api',
+      fileList: ['libs/authenticate.js'],
+      platformImpact: {
+        level: 'critical',
+        summary: 'This PR modifies authentication paths. Critical platform paths.',
+        affectsAuth: true
+      }
+    });
+    expect(prompt).toContain('Platform Impact Assessment');
+    expect(prompt).toContain('authentication paths');
+    expect(prompt).toContain('platform safety');
+  });
+
+  test('omits platform impact section when summary is empty', () => {
+    const prompt = buildUserPrompt({
+      standards: '',
+      diff: '+line',
+      prTitle: 'Fix typo',
+      prBody: '',
+      prBase: 'master',
+      repoName: 'fliplet-api',
+      fileList: ['src/utils.js'],
+      platformImpact: { level: 'low', summary: '' }
+    });
+    expect(prompt).not.toContain('Platform Impact Assessment');
+  });
+
+  test('omits platform impact section when not provided', () => {
+    const prompt = buildUserPrompt({
+      standards: '',
+      diff: '+line',
+      prTitle: 'Fix typo',
+      prBody: '',
+      prBase: 'master',
+      repoName: 'fliplet-api',
+      fileList: ['src/utils.js']
+    });
+    expect(prompt).not.toContain('Platform Impact Assessment');
+  });
+});
+
+describe('buildSystemPrompt with platform awareness', () => {
+  test('includes platform impact awareness section', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Platform Impact Awareness');
+    expect(prompt).toContain('Breaking API changes');
+    expect(prompt).toContain('Security regressions');
+  });
+});
+
 describe('buildUserPrompt with fullFileContext', () => {
   test('includes full file context section when provided', () => {
     const prompt = buildUserPrompt({

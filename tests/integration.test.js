@@ -4,6 +4,9 @@ const { parseDiff, isReviewableFile, getTotalChanges } = require('../src/diff-pa
 const { truncateDiff, formatDiffForPrompt } = require('../src/token-budget');
 const { parseToolResponse, buildUserPrompt, sanitizePRBody } = require('../src/claude-reviewer');
 const { mapApprovalToEvent, buildReviewBody, buildReviewComments } = require('../src/github-poster');
+const { assessPlatformImpact } = require('../src/platform-impact');
+const { generateTestSuggestions } = require('../src/test-suggestions');
+const { scorePRComplexity } = require('../src/complexity-scorer');
 
 /**
  * Integration test: simulates the full review pipeline with a mock Claude response.
@@ -173,5 +176,109 @@ describe('End-to-end review pipeline', () => {
   test('request_changes downgraded in comment-only mode', () => {
     const event = mapApprovalToEvent('request_changes', 'comment-only');
     expect(event).toBe('COMMENT');
+  });
+
+  test('platform impact flows through the pipeline', () => {
+    // Simulate an auth-related PR on fliplet-api
+    const authDiff = [
+      'diff --git a/libs/authenticate.js b/libs/authenticate.js',
+      '--- a/libs/authenticate.js',
+      '+++ b/libs/authenticate.js',
+      '@@ -10,3 +10,5 @@',
+      ' const passport = require("passport");',
+      '+const jwt = require("jsonwebtoken");',
+      '+',
+      "+function verifyToken(token) {",
+      "+  return jwt.verify(token, process.env.SECRET);",
+      '+}'
+    ].join('\n');
+
+    // Step 1: Parse diff
+    const files = parseDiff(authDiff);
+    expect(files).toHaveLength(1);
+    expect(files[0].path).toBe('libs/authenticate.js');
+
+    // Step 2: Assess platform impact
+    const impact = assessPlatformImpact(files, 'fliplet-api');
+    expect(impact.level).toBe('critical');
+    expect(impact.affectsAuth).toBe(true);
+    expect(impact.summary.length).toBeGreaterThan(0);
+
+    // Step 3: Score complexity with platform impact
+    const score = scorePRComplexity({
+      files,
+      prTitle: 'Add JWT verification',
+      prBody: '',
+      platformImpact: impact
+    });
+    // Auth file (+25 security) + critical impact (+30) = at least 55
+    expect(score).toBeGreaterThanOrEqual(40); // triggers Opus
+
+    // Step 4: Build prompt with platform impact
+    const prompt = buildUserPrompt({
+      standards: '# Rules',
+      diff: '+jwt.verify(token)',
+      prTitle: 'Add JWT verification',
+      prBody: '',
+      prBase: 'master',
+      repoName: 'fliplet-api',
+      fileList: ['libs/authenticate.js'],
+      platformImpact: impact
+    });
+    expect(prompt).toContain('Platform Impact Assessment');
+
+    // Step 5: Simulate Claude response
+    const mockResponse = {
+      content: [{
+        type: 'tool_use',
+        name: 'submit_review',
+        input: {
+          summary: 'JWT verification added to auth module.',
+          approval: 'comment',
+          comments: [{
+            path: 'libs/authenticate.js',
+            line: 14,
+            severity: 'warning',
+            body: 'process.env.SECRET should be validated at startup.'
+          }]
+        }
+      }]
+    };
+    const review = parseToolResponse(mockResponse);
+
+    // Step 6: Generate test suggestions
+    const testSuggestions = generateTestSuggestions(files, impact, 'fliplet-api', review.comments);
+    expect(testSuggestions.length).toBeGreaterThanOrEqual(1);
+    expect(testSuggestions[0].severity).toBe('warning'); // auth without tests
+
+    // Step 7: Build review body with impact banner
+    const combinedReview = {
+      ...review,
+      comments: [...review.comments, ...testSuggestions]
+    };
+    const body = buildReviewBody(combinedReview, impact);
+    expect(body).toContain('Platform Impact: CRITICAL');
+    expect(body).toContain('Authentication');
+  });
+
+  test('trivial PR has no impact banner and no test suggestions', () => {
+    const trivialDiff = [
+      'diff --git a/src/utils.js b/src/utils.js',
+      '--- a/src/utils.js',
+      '+++ b/src/utils.js',
+      '@@ -1,3 +1,3 @@',
+      "-const x = 'old';",
+      "+const x = 'new';"
+    ].join('\n');
+
+    const files = parseDiff(trivialDiff);
+    const impact = assessPlatformImpact(files, 'fliplet-api');
+    expect(impact.level).toBe('low');
+
+    const body = buildReviewBody({ summary: 'Looks fine.', comments: [] }, impact);
+    expect(body).not.toContain('Platform Impact');
+
+    const suggestions = generateTestSuggestions(files, impact, 'fliplet-api', []);
+    expect(suggestions).toHaveLength(0);
   });
 });

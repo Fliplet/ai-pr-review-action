@@ -38,8 +38,26 @@ const COMPLEXITY_KEYWORDS = [
   'security',
   'architecture',
   'breaking',
-  'rewrite'
+  'rewrite',
+  'endpoint',
+  'schema',
+  'database'
 ];
+
+// Platform-specific file pattern categories for impact assessment
+const ROUTE_FILE_PATTERNS = [/routes\//i];
+const MIGRATION_FILE_PATTERNS = [/models\/migrations\//i, /migrations?\//i];
+const MODEL_FILE_PATTERNS = [/models\/[^/]+\.js$/i];
+const DEPENDENCY_FILE_PATTERNS = [/^package\.json$/];
+const MIDDLEWARE_FILE_PATTERNS = [/libs\/middlewares\//i];
+const AUTH_FILE_PATTERNS = [
+  /libs\/authenticate/i, /libs\/passports/i, /libs\/guards/i,
+  /routes\/v1\/auth/i, /routes\/v1\/session/i
+];
+const DATA_SOURCE_PATTERNS = [
+  /libs\/datasources/i, /routes\/v1\/data-sources/i, /models\/dataSource/i
+];
+const TEST_FILE_PATTERNS = [/tests?\//i, /\.test\.js$/i, /\.spec\.js$/i];
 
 // Model identifiers
 const MODELS = {
@@ -58,5 +76,13 @@ module.exports = {
   CORE_FILE_PATTERNS,
   COMPLEXITY_KEYWORDS,
   MODELS,
-  MODEL_PRICING
+  MODEL_PRICING,
+  ROUTE_FILE_PATTERNS,
+  MIGRATION_FILE_PATTERNS,
+  MODEL_FILE_PATTERNS,
+  DEPENDENCY_FILE_PATTERNS,
+  MIDDLEWARE_FILE_PATTERNS,
+  AUTH_FILE_PATTERNS,
+  DATA_SOURCE_PATTERNS,
+  TEST_FILE_PATTERNS
 };

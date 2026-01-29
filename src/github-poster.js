@@ -38,7 +38,7 @@ async function hasExistingReview(octokit, owner, repo, prNumber, commitSha) {
  * Accepts a shared Octokit instance to avoid redundant instantiation.
  * Checks for duplicate reviews before posting.
  */
-async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, diffFiles }) {
+async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, diffFiles, platformImpact }) {
   // Get the PR's latest commit SHA for the review
   const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
   const commitId = pr.head.sha;
@@ -54,7 +54,7 @@ async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, 
   let event = mapApprovalToEvent(review.approval, reviewMode);
 
   // Build review body
-  const body = buildReviewBody(review);
+  const body = buildReviewBody(review, platformImpact);
 
   // Build inline comments, validating line numbers against the actual diff
   const comments = buildReviewComments(review.comments, diffFiles);
@@ -127,9 +127,16 @@ function mapApprovalToEvent(approval, reviewMode) {
 
 /**
  * Build the main review body text.
+ * Optionally includes a platform impact banner at the top.
  */
-function buildReviewBody(review) {
+function buildReviewBody(review, platformImpact) {
   let body = '## AI Code Review\n\n';
+
+  // Platform impact banner (medium+ only)
+  if (platformImpact && platformImpact.level !== 'low') {
+    body += buildImpactBanner(platformImpact) + '\n\n';
+  }
+
   body += review.summary + '\n\n';
 
   const criticalCount = review.comments.filter(c => c.severity === 'critical').length;
@@ -146,6 +153,31 @@ function buildReviewBody(review) {
   body += '\n---\n*Powered by Claude AI + Fliplet Standards*';
 
   return body;
+}
+
+/**
+ * Build platform impact banner for the review body.
+ */
+function buildImpactBanner(platformImpact) {
+  const icons = { critical: '🚨', high: '⚠️', medium: 'ℹ️' };
+  const icon = icons[platformImpact.level] || '';
+  const label = platformImpact.level.toUpperCase();
+
+  let banner = `> ${icon} **Platform Impact: ${label}**\n`;
+
+  const areas = [];
+  if (platformImpact.affectsAuth) areas.push('Authentication');
+  if (platformImpact.affectsMiddleware) areas.push('Middleware');
+  if (platformImpact.affectsSchema) areas.push('Database Schema');
+  if (platformImpact.affectsData) areas.push('Data Sources');
+  if (platformImpact.affectsRoutes) areas.push('API Routes');
+  if (platformImpact.affectsDependencies) areas.push('Dependencies');
+
+  if (areas.length > 0) {
+    banner += `> Affects: ${areas.join(', ')}`;
+  }
+
+  return banner;
 }
 
 /**
@@ -208,5 +240,6 @@ module.exports = {
   hasExistingReview,
   mapApprovalToEvent,
   buildReviewBody,
-  buildReviewComments
+  buildReviewComments,
+  buildImpactBanner
 };

@@ -106,6 +106,82 @@ describe('scorePRComplexity', () => {
   });
 });
 
+describe('scorePRComplexity with platformImpact', () => {
+  test('adds 30 for critical platform impact', () => {
+    const files = [makeFile('src/utils.js', 2, 1)];
+    const score = scorePRComplexity({
+      files,
+      prTitle: '',
+      prBody: '',
+      platformImpact: { level: 'critical', affectsSchema: false }
+    });
+    expect(score).toBe(30);
+  });
+
+  test('adds 20 for high platform impact', () => {
+    const files = [makeFile('src/utils.js', 2, 1)];
+    const score = scorePRComplexity({
+      files,
+      prTitle: '',
+      prBody: '',
+      platformImpact: { level: 'high', affectsSchema: false }
+    });
+    expect(score).toBe(20);
+  });
+
+  test('adds 10 for medium platform impact', () => {
+    const files = [makeFile('src/utils.js', 2, 1)];
+    const score = scorePRComplexity({
+      files,
+      prTitle: '',
+      prBody: '',
+      platformImpact: { level: 'medium', affectsSchema: false }
+    });
+    expect(score).toBe(10);
+  });
+
+  test('adds 0 for low platform impact', () => {
+    const files = [makeFile('src/utils.js', 2, 1)];
+    const score = scorePRComplexity({
+      files,
+      prTitle: '',
+      prBody: '',
+      platformImpact: { level: 'low', affectsSchema: false }
+    });
+    expect(score).toBe(0);
+  });
+
+  test('adds additional 15 for affectsSchema', () => {
+    const files = [makeFile('src/utils.js', 2, 1)];
+    const score = scorePRComplexity({
+      files,
+      prTitle: '',
+      prBody: '',
+      platformImpact: { level: 'critical', affectsSchema: true }
+    });
+    expect(score).toBe(45); // 30 (critical) + 15 (schema)
+  });
+
+  test('backwards-compatible: no platformImpact means no boost', () => {
+    const files = [makeFile('src/utils.js', 2, 1)];
+    const score = scorePRComplexity({ files, prTitle: '', prBody: '' });
+    expect(score).toBe(0);
+  });
+
+  test('platform impact + other criteria still caps at 100', () => {
+    const files = [
+      ...Array.from({ length: 12 }, (_, i) => makeFile(`src/auth/route${i}.js`, 20, 10, 3)),
+    ];
+    const score = scorePRComplexity({
+      files,
+      prTitle: 'Refactor security architecture rewrite',
+      prBody: 'Breaking migration changes',
+      platformImpact: { level: 'critical', affectsSchema: true }
+    });
+    expect(score).toBeLessThanOrEqual(100);
+  });
+});
+
 describe('recommendModel', () => {
   test('returns Opus for score >= 40', () => {
     expect(recommendModel(40)).toBe(MODELS.OPUS);

@@ -13,8 +13,12 @@ const { SECURITY_SENSITIVE_PATTERNS, COMPLEXITY_KEYWORDS, MODELS } = require('./
  *   - Complexity keywords in PR title/body: +15
  *   - Many hunks (>20 total): +10
  *   - Large single file (>100 changes): +15
+ *   - Platform impact critical: +30 (optional)
+ *   - Platform impact high: +20 (optional)
+ *   - Platform impact medium: +10 (optional)
+ *   - Platform impact affectsSchema: +15 (optional)
  */
-function scorePRComplexity({ files, prTitle, prBody }) {
+function scorePRComplexity({ files, prTitle, prBody, platformImpact }) {
   let score = 0;
 
   // Total line changes
@@ -53,6 +57,21 @@ function scorePRComplexity({ files, prTitle, prBody }) {
   const hasLargeFile = files.some(f => (f.additions + f.deletions) > 100);
   if (hasLargeFile) {
     score += 15;
+  }
+
+  // Platform impact boost (backwards-compatible: only applies if provided)
+  if (platformImpact) {
+    if (platformImpact.level === 'critical') {
+      score += 30;
+    } else if (platformImpact.level === 'high') {
+      score += 20;
+    } else if (platformImpact.level === 'medium') {
+      score += 10;
+    }
+
+    if (platformImpact.affectsSchema) {
+      score += 15;
+    }
   }
 
   return Math.min(score, 100);
