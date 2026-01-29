@@ -1,0 +1,26 @@
+{
+  "name": "@fliplet/ai-pr-review-action",
+  "version": "1.1.0",
+  "description": "AI-powered PR code review using Claude API and Fliplet coding standards",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest --coverage",
+    "build": "ncc build src/index.js -o dist --source-map --license licenses.txt"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@octokit/rest": "^21.1.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testMatch": ["**/tests/**/*.test.js"],
+    "testEnvironment": "node"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

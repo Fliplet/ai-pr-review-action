@@ -1,0 +1,30 @@
+# Phase 1+ - ChromaDB-based dynamic context
+# This will be used to add codebase-aware context to reviews
+#
+# Usage (future):
+#   docker build -t ghcr.io/fliplet/knowledge-chromadb -f docker/Dockerfile.ci .
+#   docker push ghcr.io/fliplet/knowledge-chromadb
+#
+# The container will:
+# 1. Run ChromaDB with pre-built embeddings
+# 2. Serve a simple HTTP API for similarity search
+# 3. Be used as a service container in the GitHub Actions workflow
+
+FROM python:3.11-slim
+
+# Placeholder - will be implemented in Phase 1+
+RUN echo "Phase 1+ - ChromaDB integration coming soon"
+
+WORKDIR /app
+
+# Will install: chromadb, sentence-transformers, flask
+# COPY requirements.txt .
+# RUN pip install -r requirements.txt
+
+# COPY embeddings/ /app/embeddings/
+# COPY entrypoint.sh /app/entrypoint.sh
+
+EXPOSE 8000
+
+# CMD ["python", "server.py"]
+CMD ["echo", "Phase 1+ placeholder - not yet implemented"]

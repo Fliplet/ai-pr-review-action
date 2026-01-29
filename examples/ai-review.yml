@@ -1,0 +1,52 @@
+# Example workflow configuration for consuming repos (fliplet-api, fliplet-studio).
+# Place this at .github/workflows/ai-review.yml in the consuming repo.
+#
+# Improvements over a minimal config:
+# - paths-ignore: skips review for docs-only and config-only changes
+# - reopened trigger: reviews PRs that were closed and reopened
+# - concurrency: cancels stale reviews when new commits are pushed
+
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '**.yml'
+      - '**.yaml'
+      - 'docs/**'
+      - '.github/**'
+      - 'LICENSE'
+
+  # Allow manual trigger on any PR
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip draft PRs and bot PRs
+    if: |
+      github.event.pull_request.draft != true &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'renovate[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: AI Review
+        uses: Fliplet/ai-pr-review-action@v1
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          review-mode: 'can-request-changes'
+          max-output-tokens: '4096'

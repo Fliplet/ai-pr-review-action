@@ -1,0 +1,107 @@
+{
+  "critical": {
+    "description": "Issues that MUST be fixed before merge. Triggers request_changes.",
+    "patterns": [
+      {
+        "id": "no-localstorage",
+        "description": "Using localStorage instead of Fliplet.Storage",
+        "pattern": "localStorage"
+      },
+      {
+        "id": "no-raw-fetch",
+        "description": "Using fetch() instead of Fliplet.API.request()",
+        "pattern": "fetch("
+      },
+      {
+        "id": "no-window-location",
+        "description": "Using window.location instead of Fliplet.Navigate",
+        "pattern": "window.location"
+      },
+      {
+        "id": "no-eval",
+        "description": "Using eval() which is a security risk",
+        "pattern": "eval("
+      },
+      {
+        "id": "no-innerhtml-unsanitized",
+        "description": "Using innerHTML with user input (XSS risk)",
+        "pattern": "innerHTML"
+      },
+      {
+        "id": "no-sql-concat",
+        "description": "String concatenation in SQL queries (injection risk)",
+        "pattern": "SQL string concatenation"
+      },
+      {
+        "id": "no-exposed-secrets",
+        "description": "Hardcoded API keys, tokens, or passwords",
+        "pattern": "hardcoded credentials"
+      },
+      {
+        "id": "no-core-mutation",
+        "description": "Modifying Fliplet core API objects",
+        "pattern": "Fliplet.* = "
+      }
+    ]
+  },
+  "warning": {
+    "description": "Issues that should be addressed but don't block merge.",
+    "patterns": [
+      {
+        "id": "missing-error-handling",
+        "description": "Promise chains or async functions without error handling"
+      },
+      {
+        "id": "no-strict-mode",
+        "description": "Missing 'use strict' directive"
+      },
+      {
+        "id": "global-scope-pollution",
+        "description": "Variables or functions in global scope without IIFE"
+      },
+      {
+        "id": "missing-input-validation",
+        "description": "API endpoints without input validation"
+      },
+      {
+        "id": "api-in-loop",
+        "description": "Fliplet API calls inside loops"
+      },
+      {
+        "id": "missing-cleanup",
+        "description": "Event listeners without cleanup"
+      },
+      {
+        "id": "options-api",
+        "description": "Using Vue Options API instead of Composition API"
+      }
+    ]
+  },
+  "suggestion": {
+    "description": "Style and improvement suggestions. Informational only.",
+    "patterns": [
+      {
+        "id": "prefer-const",
+        "description": "Using let when const would suffice"
+      },
+      {
+        "id": "verbose-code",
+        "description": "Code that could be simplified"
+      },
+      {
+        "id": "better-api-alternative",
+        "description": "A more appropriate Fliplet API exists"
+      },
+      {
+        "id": "naming-convention",
+        "description": "Variable or function naming could be clearer"
+      }
+    ]
+  },
+  "gating": {
+    "skipFileExtensions": [".md", ".txt", ".yml", ".yaml", ".json", ".lock", ".png", ".jpg", ".svg"],
+    "skipPaths": ["node_modules/", ".github/", "dist/", "coverage/", "package-lock.json"],
+    "skipAuthors": ["dependabot[bot]", "renovate[bot]"],
+    "minChanges": 5
+  }
+}
