@@ -26,17 +26,36 @@ async function run() {
   const reviewMode = process.env.REVIEW_MODE || 'can-request-changes';
   const maxDiffTokens = parseInt(process.env.MAX_DIFF_TOKENS, 10) || 15000;
   const maxOutputTokens = parseInt(process.env.MAX_OUTPUT_TOKENS, 10) || 4096;
-  const prTitle = process.env.PR_TITLE || '';
-  const prBody = process.env.PR_BODY || '';
-  const prBase = process.env.PR_BASE || 'master';
   const autoModelSelection = (process.env.AUTO_MODEL_SELECTION || 'true') === 'true';
   const enableThinking = process.env.ENABLE_THINKING || 'auto';
   const explicitModel = process.env.CLAUDE_MODEL;
+
+  if (!prNumber || isNaN(prNumber)) {
+    console.log('No PR number provided. Skipping review.');
+    return;
+  }
 
   console.log(`Reviewing PR #${prNumber} on ${owner}/${repo}`);
 
   // Single Octokit instance shared across all modules
   const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+
+  // Fetch PR metadata from API when not available from event context
+  // (e.g., workflow_dispatch triggers don't provide pull_request event data)
+  let prTitle = process.env.PR_TITLE || '';
+  let prBody = process.env.PR_BODY || '';
+  let prBase = process.env.PR_BASE || '';
+  if (!prTitle || !prBase) {
+    console.log('Fetching PR metadata from API (workflow_dispatch mode)...');
+    const { data: prData } = await octokit.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber
+    });
+    prTitle = prTitle || prData.title || '';
+    prBody = prBody || prData.body || '';
+    prBase = prBase || prData.base.ref || 'master';
+  }
 
   // Fetch the PR diff
   const { data: diff } = await octokit.pulls.get({

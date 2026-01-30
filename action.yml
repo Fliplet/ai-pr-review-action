@@ -33,6 +33,10 @@ inputs:
     description: 'Extended thinking for complex PRs (auto/always/never). Auto enables for Opus or high-complexity PRs.'
     required: false
     default: 'auto'
+  pr-number:
+    description: 'PR number to review (for workflow_dispatch triggers)'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -65,7 +69,7 @@ runs:
         CLAUDE_MODEL: ${{ inputs.model }}
         MAX_DIFF_TOKENS: ${{ inputs.max-diff-tokens }}
         MAX_OUTPUT_TOKENS: ${{ inputs.max-output-tokens }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr-number }}
         REPO_OWNER: ${{ github.repository_owner }}
         REPO_NAME: ${{ github.event.repository.name }}
         PR_TITLE: ${{ github.event.pull_request.title }}
