@@ -2,6 +2,14 @@
 
 GitHub Action that reviews pull requests using Claude AI against Fliplet coding standards. Posts inline review comments with severity levels and can request changes for critical issues.
 
+## Status
+
+**Live on:**
+- `Fliplet/fliplet-api` — active since Jan 29, 2026
+- `Fliplet/fliplet-studio` — active since Jan 30, 2026
+
+Every PR on these repos gets an automatic AI review on open and on each push. Reviews appear as `github-actions[bot]` comments with inline code annotations.
+
 ## Features
 
 - **Inline review comments** — Comments on specific lines with `critical`, `warning`, or `suggestion` severity
@@ -15,6 +23,8 @@ GitHub Action that reviews pull requests using Claude AI against Fliplet coding 
 - **Duplicate detection** — Skips posting if an identical review already exists
 - **Prompt injection protection** — Sanitizes PR descriptions to prevent instruction override
 - **Retry with backoff** — Handles transient API failures gracefully
+- **Manual dispatch** — Any developer can trigger a review on any PR from the Actions tab
+- **Graceful failure** — Never blocks a merge; exits cleanly on any error
 
 ## Quick Start
 
@@ -25,21 +35,38 @@ name: AI PR Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
 
 jobs:
-  review:
-    if: github.event.pull_request.draft != true
+  ai-review:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (!github.event.pull_request.draft &&
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
+       github.event.pull_request.user.login != 'snyk-bot')
     steps:
       - name: AI Review
-        uses: Fliplet/ai-pr-review-action@main
+        uses: Fliplet/ai-pr-review-action@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          review-mode: 'can-request-changes'
+          pr-number: ${{ github.event.inputs.pr_number || '' }}
 ```
 
 ## Inputs
@@ -54,14 +81,16 @@ jobs:
 | `max-output-tokens` | No | `4096` | Maximum tokens for Claude response |
 | `auto-model-selection` | No | `true` | Auto-select model based on PR complexity |
 | `enable-thinking` | No | `auto` | Extended thinking: `auto`, `always`, or `never` |
+| `pr-number` | No | — | PR number for `workflow_dispatch` triggers |
 
 ## How It Works
 
 ### Review Pipeline
 
 ```
-PR opened/updated
+PR opened/updated (or manual dispatch with PR number)
   → Fetch diff from GitHub API
+  → Fetch PR metadata (title, body, base branch)
   → Parse into structured file changes
   → Filter to reviewable code files
   → Score PR complexity (0-100)
@@ -129,20 +158,24 @@ For very large diffs (>1.5x token budget AND >5 files):
 
 This saves cost and focuses review effort where it matters.
 
-## Full Example Workflow
+## Manual Trigger
 
-See [`examples/ai-review.yml`](examples/ai-review.yml) for a production-ready workflow with:
-- Path filtering (skips docs/config-only changes)
-- Draft PR and bot author skipping
-- Concurrency control (cancels stale reviews on new pushes)
-- Manual trigger support via `workflow_dispatch`
+Any developer can trigger a review on any open PR:
+
+1. Go to the repo's **Actions** tab
+2. Select **AI PR Review** workflow
+3. Click **Run workflow**
+4. Enter the PR number
+5. The review will appear on the PR within ~30-60 seconds
+
+This works for both `fliplet-api` and `fliplet-studio`.
 
 ## Configuration Examples
 
 ### Cost-conscious (Sonnet only, no thinking)
 
 ```yaml
-- uses: Fliplet/ai-pr-review-action@main
+- uses: Fliplet/ai-pr-review-action@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -153,7 +186,7 @@ See [`examples/ai-review.yml`](examples/ai-review.yml) for a production-ready wo
 ### Maximum thoroughness (always Opus + thinking)
 
 ```yaml
-- uses: Fliplet/ai-pr-review-action@main
+- uses: Fliplet/ai-pr-review-action@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -165,7 +198,7 @@ See [`examples/ai-review.yml`](examples/ai-review.yml) for a production-ready wo
 ### Comment-only mode (no request_changes)
 
 ```yaml
-- uses: Fliplet/ai-pr-review-action@main
+- uses: Fliplet/ai-pr-review-action@v1
   with:
     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -178,7 +211,7 @@ The action logs model-aware cost estimates after each review:
 
 | Model | Input | Output | Typical Review |
 |-------|-------|--------|----------------|
-| Sonnet | $3/M tokens | $15/M tokens | ~$0.05-0.10 |
+| Sonnet | $3/M tokens | $15/M tokens | ~$0.02-0.10 |
 | Opus | $15/M tokens | $75/M tokens | ~$0.25-0.50 |
 
 Adaptive model selection means Opus only triggers for ~10-20% of PRs (complex ones), keeping average cost close to Sonnet-only.
@@ -195,12 +228,14 @@ ai-pr-review-action/
 │   ├── constants.js            # Shared patterns (security, core files, keywords, pricing)
 │   ├── diff-parser.js          # Unified diff → structured file/hunk/line objects
 │   ├── github-poster.js        # GitHub review posting with duplicate detection
+│   ├── platform-impact.js      # Platform impact assessment for Fliplet repos
+│   ├── test-suggestions.js     # Auto-generated test coverage suggestions
 │   ├── token-budget.js         # Priority-based truncation to fit context window
 │   └── retry.js                # Exponential backoff retry wrapper
 ├── standards/
 │   ├── fliplet-rules.md        # Fliplet coding standards (injected into prompt)
 │   └── severity-rules.json     # Pattern definitions for critical/warning/suggestion
-├── tests/                      # Jest test suite (128 tests)
+├── tests/                      # Jest test suite (174 tests)
 ├── docker/                     # CI Docker image
 └── examples/
     └── ai-review.yml           # Production workflow template
@@ -224,3 +259,4 @@ npx jest --coverage
 - Node.js 20+
 - Anthropic API key with access to Claude Sonnet 4 (and Opus 4.5 for adaptive mode)
 - GitHub token with `pull-requests: write` and `contents: read` permissions
+- `ANTHROPIC_API_KEY` must be configured as a repository secret
