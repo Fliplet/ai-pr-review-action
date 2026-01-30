@@ -1,6 +1,6 @@
 'use strict';
 
-const { parseReviewResponse, parseToolResponse, buildUserPrompt, sanitizePRBody, buildSystemPrompt, shouldEnableThinking } = require('../src/claude-reviewer');
+const { parseReviewResponse, parseToolResponse, buildUserPrompt, sanitizePRBody, buildSystemPrompt, shouldEnableThinking, loadRepoSpecificStandards, getRepoSpecificRulesFile } = require('../src/claude-reviewer');
 
 describe('sanitizePRBody', () => {
   test('returns empty string for null/undefined', () => {
@@ -415,5 +415,142 @@ describe('parseToolResponse with thinking blocks', () => {
     const result = parseToolResponse(response);
     expect(result.summary).toBe('Clean code');
     expect(result.approval).toBe('approve');
+  });
+});
+
+describe('getRepoSpecificRulesFile', () => {
+  test('returns api rules for fliplet-api', () => {
+    expect(getRepoSpecificRulesFile('fliplet-api')).toBe('fliplet-api-rules.md');
+  });
+
+  test('returns studio rules for fliplet-studio', () => {
+    expect(getRepoSpecificRulesFile('fliplet-studio')).toBe('fliplet-studio-rules.md');
+  });
+
+  test('returns widget rules for fliplet-widget-* repos', () => {
+    expect(getRepoSpecificRulesFile('fliplet-widget-form-builder')).toBe('fliplet-widget-rules.md');
+    expect(getRepoSpecificRulesFile('fliplet-widget-dynamic-lists')).toBe('fliplet-widget-rules.md');
+    expect(getRepoSpecificRulesFile('fliplet-widget-link')).toBe('fliplet-widget-rules.md');
+  });
+
+  test('returns null for unknown repos', () => {
+    expect(getRepoSpecificRulesFile('some-other-repo')).toBeNull();
+    expect(getRepoSpecificRulesFile('fliplet-cli')).toBeNull();
+  });
+
+  test('returns null for empty/undefined', () => {
+    expect(getRepoSpecificRulesFile('')).toBeNull();
+    expect(getRepoSpecificRulesFile(undefined)).toBeNull();
+    expect(getRepoSpecificRulesFile(null)).toBeNull();
+  });
+});
+
+describe('loadRepoSpecificStandards', () => {
+  test('loads fliplet-api-rules.md for fliplet-api', () => {
+    const content = loadRepoSpecificStandards('fliplet-api');
+    expect(content).toContain('Fliplet API');
+    expect(content).toContain('authenticate');
+    expect(content).toContain('preloaders');
+  });
+
+  test('loads fliplet-studio-rules.md for fliplet-studio', () => {
+    const content = loadRepoSpecificStandards('fliplet-studio');
+    expect(content).toContain('Fliplet Studio');
+    expect(content).toContain('Composition API');
+  });
+
+  test('loads fliplet-widget-rules.md for widget repos', () => {
+    const content = loadRepoSpecificStandards('fliplet-widget-form-builder');
+    expect(content).toContain('Widget');
+    expect(content).toContain('IIFE');
+    expect(content).toContain('widget.json');
+  });
+
+  test('returns empty string for unknown repos', () => {
+    expect(loadRepoSpecificStandards('unknown-repo')).toBe('');
+  });
+
+  test('returns empty string for null/undefined', () => {
+    expect(loadRepoSpecificStandards(null)).toBe('');
+    expect(loadRepoSpecificStandards(undefined)).toBe('');
+  });
+});
+
+describe('buildUserPrompt with repo-specific standards', () => {
+  test('includes repo-specific standards section when provided', () => {
+    const prompt = buildUserPrompt({
+      standards: '# Base Rules',
+      repoStandards: '# API-Specific Rules\n\nUse authenticate middleware.',
+      diff: '+new line',
+      prTitle: 'Fix route',
+      prBody: '',
+      prBase: 'projects/PS-100',
+      repoName: 'fliplet-api',
+      fileList: ['routes/v1/apps.js']
+    });
+    expect(prompt).toContain('Base Rules');
+    expect(prompt).toContain('Repository-Specific Standards');
+    expect(prompt).toContain('API-Specific Rules');
+    expect(prompt).toContain('authenticate middleware');
+  });
+
+  test('omits repo-specific section when repoStandards is empty', () => {
+    const prompt = buildUserPrompt({
+      standards: '# Base Rules',
+      repoStandards: '',
+      diff: '+line',
+      prTitle: 'Fix',
+      prBody: '',
+      prBase: 'master',
+      repoName: 'fliplet-cli',
+      fileList: ['src/index.js']
+    });
+    expect(prompt).toContain('Base Rules');
+    expect(prompt).not.toContain('Repository-Specific Standards');
+  });
+
+  test('omits repo-specific section when repoStandards is undefined', () => {
+    const prompt = buildUserPrompt({
+      standards: '# Base Rules',
+      diff: '+line',
+      prTitle: 'Fix',
+      prBody: '',
+      prBase: 'master',
+      repoName: 'test',
+      fileList: []
+    });
+    expect(prompt).not.toContain('Repository-Specific Standards');
+  });
+});
+
+describe('buildSystemPrompt with repo-specific patterns', () => {
+  test('includes repo-specific patterns for fliplet-api', () => {
+    const prompt = buildSystemPrompt('fliplet-api');
+    expect(prompt).toContain('Repo-specific patterns');
+    expect(prompt).toContain('authenticate middleware');
+  });
+
+  test('includes repo-specific patterns for fliplet-studio', () => {
+    const prompt = buildSystemPrompt('fliplet-studio');
+    expect(prompt).toContain('Repo-specific patterns');
+    expect(prompt).toContain('bus.$on');
+  });
+
+  test('includes repo-specific patterns for widget repos', () => {
+    const prompt = buildSystemPrompt('fliplet-widget-form-builder');
+    expect(prompt).toContain('Repo-specific patterns');
+    expect(prompt).toContain('IIFE');
+  });
+
+  test('does not include repo-specific patterns for unknown repos', () => {
+    const prompt = buildSystemPrompt('some-other-repo');
+    expect(prompt).not.toContain('Repo-specific patterns');
+  });
+
+  test('works without repoName (backwards compatible)', () => {
+    const prompt = buildSystemPrompt();
+    expect(typeof prompt).toBe('string');
+    expect(prompt.length).toBeGreaterThan(100);
+    expect(prompt).toContain('CRITICAL');
   });
 });

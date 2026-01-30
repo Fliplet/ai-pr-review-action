@@ -260,66 +260,24 @@ export default {
 - Consider offline scenarios for mobile apps
 - Test compatibility across Fliplet Studio, web viewer, and mobile
 
-## Backend (fliplet-api) Specific Rules
+## Backend (fliplet-api) Summary
 
-### Express Routes
+> **Note:** Detailed backend rules are in `fliplet-api-rules.md` (loaded automatically for API PRs).
+
 - Validate request parameters and body
-- Use proper HTTP status codes
-- Handle async errors with try/catch or middleware
-- Use parameterized queries for database operations (prevent SQL injection)
-
-#### Examples
-
-**Violation:** Missing input validation and error handling
-```js
-// BAD
-router.post('/api/items', function(req, res) {
-  db.query('INSERT INTO items (name) VALUES (' + req.body.name + ')');
-  res.json({ success: true });
-});
-```
-**Fix:** Validate input, parameterize, handle errors
-```js
-// GOOD
-router.post('/api/items', async function(req, res) {
-  try {
-    const { name } = req.body;
-    if (!name || typeof name !== 'string') {
-      return res.status(400).json({ error: 'Name is required' });
-    }
-    await db.query('INSERT INTO items (name) VALUES (?)', [name]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Failed to create item:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-```
-
-### Database
-- Never concatenate user input into SQL strings
-- Use transactions for multi-step operations
-- Add appropriate indexes for queried columns
-- Handle connection errors gracefully
-
-### Authentication & Authorization
-- Verify user permissions before data access
-- Use Fliplet's session/token validation
+- Use proper HTTP status codes and `res.error()` for error responses
+- Handle async errors with try/catch
+- Use parameterized queries (prevent SQL injection)
+- Use `authenticate` middleware on all routes
+- Use `preloaders` for entity loading from parameters
 - Never trust client-side auth state alone
-- Log security-relevant operations
 
-### API Design
-- Follow RESTful conventions
-- Return consistent response formats
-- Document new endpoints
-- Version breaking changes appropriately
+## Widget (fliplet-widget-*) Summary
 
-## widget.json Configuration Rules
+> **Note:** Detailed widget rules are in `fliplet-widget-rules.md` (loaded automatically for widget PRs).
 
-When reviewing `widget.json` files:
-- Ensure `name` matches the widget's purpose
-- Verify `package` follows naming convention: `com.fliplet.<name>`
-- Check that `dependencies` reference valid Fliplet packages
-- Ensure `icon` path is valid
-- Verify `interface` and `build` HTML file paths are correct
-- Check `references` are declared for any provider widgets used
+- Wrap code in IIFE with `'use strict'`
+- Use `Fliplet.Widget.instance()` for initialization
+- Use `Fliplet.Widget.onSaveRequest()` with validation before save
+- Declare provider references in `widget.json`
+- Follow `com.fliplet.<name>` package naming convention

@@ -44,9 +44,40 @@ const REVIEW_TOOL = {
 };
 
 /**
- * Build the system prompt, incorporating severity rules from JSON config.
+ * Determine the repo-specific standards file name based on the repo name.
+ * @param {string} repoName
+ * @returns {string|null} File name or null if no specific rules exist
  */
-function buildSystemPrompt() {
+function getRepoSpecificRulesFile(repoName) {
+  if (repoName === 'fliplet-api') return 'fliplet-api-rules.md';
+  if (repoName === 'fliplet-studio') return 'fliplet-studio-rules.md';
+  if (repoName && repoName.startsWith('fliplet-widget-')) return 'fliplet-widget-rules.md';
+  return null;
+}
+
+/**
+ * Load repo-specific standards file content.
+ * @param {string} repoName
+ * @returns {string} Repo-specific standards content, or empty string if none
+ */
+function loadRepoSpecificStandards(repoName) {
+  const fileName = getRepoSpecificRulesFile(repoName);
+  if (!fileName) return '';
+
+  try {
+    const filePath = path.join(__dirname, '..', 'standards', fileName);
+    return fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    console.warn(`Could not load repo-specific standards (${fileName}):`, err.message);
+    return '';
+  }
+}
+
+/**
+ * Build the system prompt, incorporating severity rules from JSON config.
+ * @param {string} [repoName] - Repository name for repo-specific patterns
+ */
+function buildSystemPrompt(repoName) {
   let prompt = `You are a senior Fliplet platform code reviewer. Review the PR diff against Fliplet coding standards.
 
 Your review should:
@@ -96,6 +127,34 @@ For each comment, provide:
       prompt += '\n\nSuggestion patterns:';
       for (const p of rules.suggestion.patterns) {
         prompt += `\n- ${p.description}`;
+      }
+    }
+
+    // Inject repo-specific severity patterns
+    if (repoName && rules.repoSpecific) {
+      const repoKey = repoName === 'fliplet-api' ? 'fliplet-api'
+        : repoName === 'fliplet-studio' ? 'fliplet-studio'
+        : (repoName && repoName.startsWith('fliplet-widget-')) ? 'fliplet-widget'
+        : null;
+
+      const repoRules = repoKey ? rules.repoSpecific[repoKey] : null;
+
+      if (repoRules) {
+        prompt += `\n\nRepo-specific patterns for ${repoName}:`;
+
+        if (repoRules.critical) {
+          prompt += '\n\nRepo-specific critical:';
+          for (const p of repoRules.critical) {
+            prompt += `\n- ${p.description}${p.pattern ? ` (look for: \`${p.pattern}\`)` : ''}`;
+          }
+        }
+
+        if (repoRules.warning) {
+          prompt += '\n\nRepo-specific warnings:';
+          for (const p of repoRules.warning) {
+            prompt += `\n- ${p.description}`;
+          }
+        }
       }
     }
   } catch (err) {
@@ -183,12 +242,13 @@ async function reviewWithClaude({ diff, prTitle, prBody, prBase, repoName, fileL
   const baseOutputTokens = maxOutputTokens || 4096;
   const outputTokens = useThinking ? 16000 : baseOutputTokens;
 
-  // Load standards
+  // Load base standards + repo-specific standards
   const standardsPath = path.join(__dirname, '..', 'standards', 'fliplet-rules.md');
   const standards = fs.readFileSync(standardsPath, 'utf-8');
+  const repoStandards = loadRepoSpecificStandards(repoName);
 
-  const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt({ standards, diff, prTitle, prBody, prBase, repoName, fileList, fullFileContext, platformImpact });
+  const systemPrompt = buildSystemPrompt(repoName);
+  const userPrompt = buildUserPrompt({ standards, repoStandards, diff, prTitle, prBody, prBase, repoName, fileList, fullFileContext, platformImpact });
 
   const client = new Anthropic({ apiKey });
 
@@ -359,11 +419,16 @@ function parseToolResponse(response) {
 }
 
 /**
- * Build the user prompt with standards, platform impact, full file context, and diff.
+ * Build the user prompt with standards, repo-specific standards, platform impact, full file context, and diff.
  */
-function buildUserPrompt({ standards, diff, prTitle, prBody, prBase, repoName, fileList, fullFileContext, platformImpact }) {
+function buildUserPrompt({ standards, repoStandards, diff, prTitle, prBody, prBase, repoName, fileList, fullFileContext, platformImpact }) {
   let prompt = '## Fliplet Coding Standards\n\n';
   prompt += standards + '\n\n';
+
+  if (repoStandards) {
+    prompt += '## Repository-Specific Standards\n\n';
+    prompt += repoStandards + '\n\n';
+  }
   prompt += '## PR Information\n\n';
   prompt += `- Repository: ${repoName}\n`;
   prompt += `- Title: ${prTitle}\n`;
@@ -449,5 +514,7 @@ module.exports = {
   buildUserPrompt,
   buildSystemPrompt,
   sanitizePRBody,
-  shouldEnableThinking
+  shouldEnableThinking,
+  loadRepoSpecificStandards,
+  getRepoSpecificRulesFile
 };

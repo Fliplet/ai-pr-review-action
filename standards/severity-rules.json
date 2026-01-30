@@ -98,6 +98,130 @@
       }
     ]
   },
+  "repoSpecific": {
+    "fliplet-api": {
+      "critical": [
+        {
+          "id": "api-missing-authenticate",
+          "description": "Route file missing authenticate middleware (router.use(authenticate))",
+          "pattern": "router.use(authenticate)"
+        },
+        {
+          "id": "api-raw-sql-concat",
+          "description": "String interpolation in Sequelize.literal() or raw SQL queries",
+          "pattern": "Sequelize.literal(`"
+        },
+        {
+          "id": "api-req-body-unvalidated",
+          "description": "Using req.body fields directly without validation or _.pick()",
+          "pattern": "req.body"
+        },
+        {
+          "id": "api-missing-permission-check",
+          "description": "Data modification without checking hasPermission(), belongsToOrganization(), or role middleware"
+        }
+      ],
+      "warning": [
+        {
+          "id": "api-async-no-try-catch",
+          "description": "Async route handler without try/catch wrapping"
+        },
+        {
+          "id": "api-missing-res-error",
+          "description": "Validation failure not using res.error() or res.status().send()"
+        },
+        {
+          "id": "api-missing-preloader",
+          "description": "Querying database directly for entity that should use preloaders (req.flApp, req.flDataSource, etc.)"
+        },
+        {
+          "id": "api-required-true-include",
+          "description": "Sequelize include with required:true (INNER JOIN) that may filter out valid records"
+        }
+      ]
+    },
+    "fliplet-studio": {
+      "critical": [
+        {
+          "id": "studio-raw-fetch",
+          "description": "Using fetch() or XMLHttpRequest instead of Vue HTTP client or Fliplet.API.request()"
+        },
+        {
+          "id": "studio-pr-targets-master",
+          "description": "PR targeting master branch instead of projects/ branch"
+        }
+      ],
+      "warning": [
+        {
+          "id": "studio-bus-no-cleanup",
+          "description": "bus.$on() without corresponding bus.$off() in beforeDestroy/unmounted"
+        },
+        {
+          "id": "studio-direct-state-mutation",
+          "description": "Directly mutating global state object instead of using mutation functions"
+        },
+        {
+          "id": "studio-options-api-new-code",
+          "description": "New code using Vue Options API (data(), methods, computed) instead of Composition API"
+        },
+        {
+          "id": "studio-missing-tracking",
+          "description": "New user interaction without trackEvent() call"
+        }
+      ]
+    },
+    "fliplet-widget": {
+      "critical": [
+        {
+          "id": "widget-no-iife",
+          "description": "Widget code not wrapped in IIFE — pollutes global scope",
+          "pattern": "missing (function()"
+        },
+        {
+          "id": "widget-localstorage",
+          "description": "Using localStorage/sessionStorage instead of Fliplet.Storage",
+          "pattern": "localStorage"
+        },
+        {
+          "id": "widget-fetch",
+          "description": "Using fetch() instead of Fliplet.API.request()",
+          "pattern": "fetch("
+        },
+        {
+          "id": "widget-window-location",
+          "description": "Using window.location instead of Fliplet.Navigate",
+          "pattern": "window.location"
+        },
+        {
+          "id": "widget-document-cookie",
+          "description": "Using document.cookie instead of Fliplet.Session",
+          "pattern": "document.cookie"
+        }
+      ],
+      "warning": [
+        {
+          "id": "widget-no-instance",
+          "description": "Using document.ready or custom init instead of Fliplet.Widget.instance()"
+        },
+        {
+          "id": "widget-save-no-validation",
+          "description": "Fliplet.Widget.save() called without prior input validation"
+        },
+        {
+          "id": "widget-missing-complete",
+          "description": "Fliplet.Widget.save() without calling Fliplet.Widget.complete() after"
+        },
+        {
+          "id": "widget-missing-catch",
+          "description": "Promise chain without .catch() error handler"
+        },
+        {
+          "id": "widget-missing-widget-json-asset",
+          "description": "New JS/CSS file created but not added to widget.json assets"
+        }
+      ]
+    }
+  },
   "gating": {
     "skipFileExtensions": [".md", ".txt", ".yml", ".yaml", ".json", ".lock", ".png", ".jpg", ".svg"],
     "skipPaths": ["node_modules/", ".github/", "dist/", "coverage/", "package-lock.json"],
