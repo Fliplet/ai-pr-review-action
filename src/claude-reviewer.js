@@ -203,11 +203,14 @@ async function reviewWithClaude({ diff, prTitle, prBody, prBase, repoName, fileL
   };
 
   // Enable extended thinking when appropriate
+  // Note: Claude API does not allow forced tool_choice with thinking enabled,
+  // so we downgrade to tool_choice: auto when thinking is on
   if (useThinking) {
     requestParams.thinking = {
       type: 'enabled',
       budget_tokens: 10000
     };
+    requestParams.tool_choice = { type: 'auto' };
     console.log(`Extended thinking enabled (budget: 10,000 tokens, max_tokens: ${outputTokens})`);
   }
 
