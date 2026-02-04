@@ -38,7 +38,7 @@ async function hasExistingReview(octokit, owner, repo, prNumber, commitSha) {
  * Accepts a shared Octokit instance to avoid redundant instantiation.
  * Checks for duplicate reviews before posting.
  */
-async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, diffFiles, platformImpact }) {
+async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, diffFiles, platformImpact, fileSummaries, tips, suggestedLabels, relatedIssues }) {
   // Get the PR's latest commit SHA for the review
   const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
   const commitId = pr.head.sha;
@@ -53,8 +53,13 @@ async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, 
   // Determine the event type
   let event = mapApprovalToEvent(review.approval, reviewMode);
 
-  // Build review body
-  const body = buildReviewBody(review, platformImpact);
+  // Build review body with all enhanced sections
+  const body = buildReviewBody(review, platformImpact, {
+    fileSummaries,
+    tips,
+    suggestedLabels,
+    relatedIssues
+  });
 
   // Build inline comments, validating line numbers against the actual diff
   const comments = buildReviewComments(review.comments, diffFiles);
@@ -126,11 +131,48 @@ function mapApprovalToEvent(approval, reviewMode) {
 }
 
 /**
+ * Build the status badge based on approval decision.
+ * Provides prominent visual feedback at the top of the review.
+ */
+function buildStatusBadge(review) {
+  const criticalCount = review.comments.filter(c => c.severity === 'critical').length;
+  const warningCount = review.comments.filter(c => c.severity === 'warning').length;
+  const totalIssues = review.comments.length;
+
+  if (review.approval === 'approve') {
+    return '# ✅ APPROVED\n> No critical issues found\n\n---\n';
+  }
+
+  if (review.approval === 'request_changes') {
+    const subtitle = criticalCount > 0
+      ? `> ${criticalCount} critical issue${criticalCount > 1 ? 's' : ''} require attention`
+      : `> ${totalIssues} issue${totalIssues > 1 ? 's' : ''} found`;
+    return `# ❌ CHANGES REQUESTED\n${subtitle}\n\n---\n`;
+  }
+
+  // comment
+  const subtitle = warningCount > 0
+    ? `> ${warningCount} warning${warningCount > 1 ? 's' : ''} to review`
+    : `> ${totalIssues} suggestion${totalIssues > 1 ? 's' : ''} for improvement`;
+  return `# ⚠️ NEEDS ATTENTION\n${subtitle}\n\n---\n`;
+}
+
+/**
  * Build the main review body text.
  * Optionally includes a platform impact banner at the top.
  */
-function buildReviewBody(review, platformImpact) {
+function buildReviewBody(review, platformImpact, options = {}) {
+  const { fileSummaries, tips, suggestedLabels, relatedIssues } = options;
+
   let body = '## AI Code Review\n\n';
+
+  // Status badge at the very top
+  body += buildStatusBadge(review);
+
+  // Walkthrough table (file summaries)
+  if (fileSummaries && fileSummaries.length > 0) {
+    body += buildWalkthroughTable(fileSummaries);
+  }
 
   // Platform impact banner (medium+ only)
   if (platformImpact && platformImpact.level !== 'low') {
@@ -150,9 +192,89 @@ function buildReviewBody(review, platformImpact) {
     if (suggestionCount) body += `| 🔵 Suggestion | ${suggestionCount} |\n`;
   }
 
+  // Tips section
+  if (tips && tips.length > 0) {
+    body += buildTipsSection(tips);
+  }
+
+  // Suggested labels
+  if (suggestedLabels && suggestedLabels.length > 0) {
+    body += buildLabelSuggestions(suggestedLabels);
+  }
+
+  // Related issues
+  if (relatedIssues && relatedIssues.length > 0) {
+    body += buildRelatedIssues(relatedIssues);
+  }
+
   body += '\n---\n*Powered by Claude AI + Fliplet Standards*';
 
   return body;
+}
+
+/**
+ * Build walkthrough table summarizing changes per file.
+ * Caps at 10 files to avoid overly long reviews.
+ */
+function buildWalkthroughTable(fileSummaries) {
+  const maxFiles = 10;
+  const displayed = fileSummaries.slice(0, maxFiles);
+  const overflow = fileSummaries.length - maxFiles;
+
+  let table = '## Walkthrough\n\n';
+  table += '| File | Changes |\n';
+  table += '|------|--------|\n';
+
+  for (const file of displayed) {
+    const path = file.path.replace(/\|/g, '\\|');
+    const summary = (file.summary || 'Modified').replace(/\|/g, '\\|');
+    table += `| \`${path}\` | ${summary} |\n`;
+  }
+
+  if (overflow > 0) {
+    table += `| | *+${overflow} more file${overflow > 1 ? 's' : ''}* |\n`;
+  }
+
+  table += '\n---\n\n';
+  return table;
+}
+
+/**
+ * Build tips section with educational notes.
+ * Max 2 tips to avoid noise.
+ */
+function buildTipsSection(tips) {
+  const displayTips = tips.slice(0, 2);
+  let section = '## 💡 Tips\n\n';
+
+  for (const tip of displayTips) {
+    section += `- **${tip.title}**: ${tip.description}\n`;
+  }
+
+  section += '\n---\n\n';
+  return section;
+}
+
+/**
+ * Build label suggestions section.
+ */
+function buildLabelSuggestions(labels) {
+  const formatted = labels.map(l => `\`${l}\``).join(' ');
+  return `## 🏷️ Suggested Labels\n\n${formatted}\n\n---\n\n`;
+}
+
+/**
+ * Build related issues section with links.
+ */
+function buildRelatedIssues(issues) {
+  let section = '## 🔗 Related Issues\n\n';
+
+  for (const issue of issues) {
+    section += `- [${issue.id}](${issue.url})\n`;
+  }
+
+  section += '\n---\n\n';
+  return section;
 }
 
 /**
@@ -241,5 +363,10 @@ module.exports = {
   mapApprovalToEvent,
   buildReviewBody,
   buildReviewComments,
-  buildImpactBanner
+  buildImpactBanner,
+  buildStatusBadge,
+  buildWalkthroughTable,
+  buildTipsSection,
+  buildLabelSuggestions,
+  buildRelatedIssues
 };

@@ -1,0 +1,92 @@
+{
+  "version": "1.0.0",
+  "description": "Fliplet platform architecture knowledge for deterministic impact assessment. Extracted from Fliplet Knowledge MCP. Designed for future dynamic integration.",
+  "criticalPaths": {
+    "authentication": {
+      "files": [
+        "libs/authenticate.js",
+        "libs/passports.js",
+        "libs/guards.js",
+        "routes/v1/auth",
+        "routes/v1/session"
+      ],
+      "risk": "critical",
+      "description": "Authentication and session management. Changes affect all authenticated requests across the platform."
+    },
+    "dataSources": {
+      "files": [
+        "libs/datasources.js",
+        "routes/v1/data-sources",
+        "models/dataSource"
+      ],
+      "risk": "high",
+      "description": "Data source connections and CRUD operations. Core data layer used by all apps."
+    },
+    "middleware": {
+      "files": [
+        "libs/middlewares/",
+        "libs/cors.js",
+        "libs/csrf.js",
+        "libs/xssProtection.js"
+      ],
+      "risk": "critical",
+      "description": "Request pipeline middleware. Changes affect every incoming request."
+    },
+    "database": {
+      "files": [
+        "libs/database.js",
+        "models/index.js",
+        "models/migrations/"
+      ],
+      "risk": "critical",
+      "description": "Database configuration, ORM setup, and schema migrations. Errors can cause data loss or downtime."
+    },
+    "security": {
+      "files": [
+        "libs/crypt.js",
+        "libs/password.js",
+        "libs/guards.js",
+        "libs/bruteforce.js"
+      ],
+      "risk": "critical",
+      "description": "Cryptography, password hashing, brute force protection. Security-critical code paths."
+    },
+    "billing": {
+      "files": [
+        "libs/billing.js",
+        "routes/v1/billing"
+      ],
+      "risk": "high",
+      "description": "Subscription and billing logic. Errors can cause incorrect charges or access issues."
+    }
+  },
+  "commonBreakingPatterns": [
+    "Removing or renaming exported functions used by other modules",
+    "Changing middleware order in the request pipeline",
+    "Altering database model associations or column types",
+    "Modifying authentication token format or validation logic",
+    "Changing API response shape on existing endpoints",
+    "Removing or changing route paths without versioning",
+    "Modifying session storage or serialization",
+    "Changing encryption/hashing algorithms without migration"
+  ],
+  "apiStructure": {
+    "routeDirectory": "routes/v1/",
+    "middlewareChain": [
+      "cors",
+      "xssProtection",
+      "csrf",
+      "authenticate",
+      "guards",
+      "route handler"
+    ],
+    "coreLibs": [
+      "libs/authenticate.js",
+      "libs/database.js",
+      "libs/datasources.js",
+      "libs/crypt.js",
+      "libs/billing.js",
+      "libs/guards.js"
+    ]
+  }
+}

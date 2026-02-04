@@ -4,13 +4,14 @@
 # Improvements over a minimal config:
 # - paths-ignore: skips review for docs-only and config-only changes
 # - reopened trigger: reviews PRs that were closed and reopened
+# - ready_for_review trigger: reviews draft PRs when marked ready
 # - concurrency: cancels stale reviews when new commits are pushed
 
 name: AI PR Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - '**.md'
       - '**.txt'

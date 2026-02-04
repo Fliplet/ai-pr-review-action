@@ -69,6 +69,37 @@ describe('truncateDiff', () => {
     };
   }
 
+  test('handles empty file list gracefully', () => {
+    const result = truncateDiff([], 10000);
+    expect(result.files).toEqual([]);
+    expect(result.totalFiles).toBe(0);
+    expect(result.includedFiles).toBe(0);
+    expect(result.truncated).toBe(false);
+    expect(result.estimatedTokens).toBe(0);
+  });
+
+  test('handles single file at exact token limit', () => {
+    const file = makeFile('exact.js', 1, 0);
+    const fileText = formatFileForPrompt(file);
+    const exactTokens = estimateTokens(fileText);
+
+    const result = truncateDiff([file], exactTokens);
+    expect(result.includedFiles).toBe(1);
+    expect(result.truncated).toBe(false);
+    expect(result.files[0].path).toBe('exact.js');
+  });
+
+  test('handles single file just over token limit', () => {
+    const file = makeFile('over.js', 10, 5);
+    const fileText = formatFileForPrompt(file);
+    const fileTokens = estimateTokens(fileText);
+
+    // Set budget to just under what the file needs
+    const result = truncateDiff([file], fileTokens - 1);
+    // File should be truncated or excluded
+    expect(result.truncated).toBe(true);
+  });
+
   test('includes all files when within budget', () => {
     const files = [makeFile('a.js', 2, 1), makeFile('b.js', 3, 1)];
     const result = truncateDiff(files, 100000);

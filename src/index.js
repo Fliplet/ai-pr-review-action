@@ -8,6 +8,9 @@ const { postReview } = require('./github-poster');
 const { scorePRComplexity, recommendModel } = require('./complexity-scorer');
 const { assessPlatformImpact } = require('./platform-impact');
 const { generateTestSuggestions } = require('./test-suggestions');
+const { suggestLabels, hasTestFiles } = require('./label-suggester');
+const { generateTips } = require('./tips-generator');
+const { detectIssues } = require('./issue-detector');
 const { MODELS, MODEL_PRICING, SECURITY_SENSITIVE_PATTERNS } = require('./constants');
 
 const MIN_CHANGES_THRESHOLD = 5;
@@ -201,6 +204,37 @@ async function run() {
     console.log(`Added ${testSuggestions.length} test suggestion(s)`);
   }
 
+  // --- Generate tips based on diff patterns (no LLM call) ---
+  const tips = generateTips(diffForReview);
+  if (tips.length > 0) {
+    console.log(`Generated ${tips.length} tip(s) for common patterns`);
+  }
+
+  // --- Suggest labels based on platform impact and PR content (no LLM call) ---
+  const prHasTestFiles = hasTestFiles(fileList.map(f => f.replace(/ \(.*\)$/, '')));
+  const suggestedLabels = suggestLabels({
+    platformImpact,
+    fileList: fileList.map(f => f.replace(/ \(.*\)$/, '')),
+    prTitle,
+    prBody,
+    hasTestFiles: prHasTestFiles
+  });
+  if (suggestedLabels.length > 0) {
+    console.log(`Suggested labels: ${suggestedLabels.join(', ')}`);
+  }
+
+  // --- Detect related issues from PR content (no LLM call) ---
+  const relatedIssues = detectIssues({
+    prTitle,
+    prBody,
+    diff: diffForReview,
+    owner,
+    repo
+  });
+  if (relatedIssues.length > 0) {
+    console.log(`Detected ${relatedIssues.length} related issue(s): ${relatedIssues.map(i => i.id).join(', ')}`);
+  }
+
   // Post the review to GitHub (shared octokit, with duplicate check)
   const result = await postReview({
     octokit,
@@ -210,7 +244,11 @@ async function run() {
     review,
     reviewMode,
     diffFiles: reviewableFiles,
-    platformImpact
+    platformImpact,
+    fileSummaries: review.file_summaries || [],
+    tips,
+    suggestedLabels,
+    relatedIssues
   });
 
   if (result.event === 'SKIPPED') {

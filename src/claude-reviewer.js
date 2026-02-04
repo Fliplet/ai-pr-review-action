@@ -24,6 +24,18 @@ const REVIEW_TOOL = {
         enum: ['approve', 'request_changes', 'comment'],
         description: 'approve if no issues, request_changes if critical issues, comment if only warnings/suggestions'
       },
+      file_summaries: {
+        type: 'array',
+        description: 'Brief 1-line summary of changes for each file (for walkthrough table)',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path from the diff' },
+            summary: { type: 'string', description: '1-line summary of what changed in this file (max 80 chars)' }
+          },
+          required: ['path', 'summary']
+        }
+      },
       comments: {
         type: 'array',
         description: 'Inline review comments on specific lines',
@@ -100,7 +112,9 @@ IMPORTANT: Only comment on actual issues. Do not create false positives. If the 
 For each comment, provide:
 - The exact file path from the diff
 - The line number in the NEW file (from + lines in the diff)
-- A clear explanation with a fix suggestion`;
+- A clear explanation with a fix suggestion
+
+IMPORTANT: Also provide a file_summaries array with a brief 1-line summary (max 80 chars) of what changed in each file. This creates a "walkthrough" section for reviewers. Focus on the semantic change, not just "modified" or "updated".`;
 
   // Load severity rules to augment the prompt with specific patterns
   try {
@@ -382,6 +396,18 @@ function parseToolResponse(response) {
 
   if (toolUseBlock && toolUseBlock.name === 'submit_review') {
     const result = toolUseBlock.input;
+
+    // Validate and clean file_summaries
+    if (Array.isArray(result.file_summaries)) {
+      result.file_summaries = result.file_summaries
+        .filter(f => f.path && f.summary)
+        .map(f => ({
+          path: f.path,
+          summary: String(f.summary).slice(0, 100) // Cap at 100 chars
+        }));
+    } else {
+      result.file_summaries = [];
+    }
 
     // Validate and clean comments
     if (Array.isArray(result.comments)) {

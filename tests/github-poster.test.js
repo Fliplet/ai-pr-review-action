@@ -1,6 +1,16 @@
 'use strict';
 
-const { mapApprovalToEvent, buildReviewBody, buildReviewComments, buildImpactBanner } = require('../src/github-poster');
+const {
+  mapApprovalToEvent,
+  buildReviewBody,
+  buildReviewComments,
+  buildImpactBanner,
+  buildStatusBadge,
+  buildWalkthroughTable,
+  buildTipsSection,
+  buildLabelSuggestions,
+  buildRelatedIssues
+} = require('../src/github-poster');
 
 describe('mapApprovalToEvent', () => {
   test('maps approve to APPROVE', () => {
@@ -218,5 +228,310 @@ describe('buildReviewComments', () => {
     ];
     const result = buildReviewComments(comments, diffFiles);
     expect(result).toHaveLength(3);
+  });
+});
+
+describe('buildStatusBadge', () => {
+  test('returns APPROVED badge for approve', () => {
+    const badge = buildStatusBadge({
+      approval: 'approve',
+      comments: []
+    });
+    expect(badge).toContain('APPROVED');
+    expect(badge).toContain('No critical issues found');
+  });
+
+  test('returns CHANGES REQUESTED badge for request_changes', () => {
+    const badge = buildStatusBadge({
+      approval: 'request_changes',
+      comments: [
+        { severity: 'critical', path: 'a.js', line: 1, body: 'XSS' }
+      ]
+    });
+    expect(badge).toContain('CHANGES REQUESTED');
+    expect(badge).toContain('1 critical issue');
+  });
+
+  test('returns NEEDS ATTENTION badge for comment', () => {
+    const badge = buildStatusBadge({
+      approval: 'comment',
+      comments: [
+        { severity: 'warning', path: 'a.js', line: 1, body: 'Issue' },
+        { severity: 'warning', path: 'b.js', line: 2, body: 'Issue' }
+      ]
+    });
+    expect(badge).toContain('NEEDS ATTENTION');
+    expect(badge).toContain('2 warnings');
+  });
+
+  test('shows suggestion count when only suggestions', () => {
+    const badge = buildStatusBadge({
+      approval: 'comment',
+      comments: [
+        { severity: 'suggestion', path: 'a.js', line: 1, body: 'Tip' }
+      ]
+    });
+    expect(badge).toContain('1 suggestion');
+  });
+
+  test('shows critical count in CHANGES REQUESTED when multiple criticals', () => {
+    const badge = buildStatusBadge({
+      approval: 'request_changes',
+      comments: [
+        { severity: 'critical', path: 'a.js', line: 1, body: 'XSS' },
+        { severity: 'critical', path: 'b.js', line: 2, body: 'Injection' }
+      ]
+    });
+    expect(badge).toContain('2 critical issues');
+  });
+});
+
+describe('buildWalkthroughTable', () => {
+  test('returns table structure for empty array', () => {
+    const table = buildWalkthroughTable([]);
+    expect(table).toContain('Walkthrough');
+    expect(table).toContain('File | Changes');
+  });
+
+  test('builds table with file summaries', () => {
+    const table = buildWalkthroughTable([
+      { path: 'src/app.js', summary: 'Added error handling' },
+      { path: 'src/utils.js', summary: 'Refactored helper functions' }
+    ]);
+    expect(table).toContain('Walkthrough');
+    expect(table).toContain('src/app.js');
+    expect(table).toContain('Added error handling');
+    expect(table).toContain('src/utils.js');
+    expect(table).toContain('Refactored helper functions');
+  });
+
+  test('caps at 10 files and shows overflow', () => {
+    const files = Array.from({ length: 15 }, (_, i) => ({
+      path: `file${i}.js`,
+      summary: `Change ${i}`
+    }));
+    const table = buildWalkthroughTable(files);
+    expect(table).toContain('file0.js');
+    expect(table).toContain('file9.js');
+    expect(table).not.toContain('file10.js');
+    expect(table).toContain('+5 more files');
+  });
+
+  test('escapes pipe characters in paths and summaries', () => {
+    const table = buildWalkthroughTable([
+      { path: 'file|name.js', summary: 'Changed | operator' }
+    ]);
+    expect(table).toContain('file\\|name.js');
+    expect(table).toContain('Changed \\| operator');
+  });
+
+  test('uses default summary when missing', () => {
+    const table = buildWalkthroughTable([
+      { path: 'file.js', summary: null }
+    ]);
+    expect(table).toContain('Modified');
+  });
+});
+
+describe('buildTipsSection', () => {
+  test('returns section header for empty array', () => {
+    const section = buildTipsSection([]);
+    expect(section).toContain('Tips');
+    expect(section).not.toContain('**');
+  });
+
+  test('builds section with tips', () => {
+    const section = buildTipsSection([
+      { id: 'tip1', title: 'Tip Title', description: 'Tip description here.' }
+    ]);
+    expect(section).toContain('Tips');
+    expect(section).toContain('**Tip Title**');
+    expect(section).toContain('Tip description here.');
+  });
+
+  test('limits to 2 tips', () => {
+    const section = buildTipsSection([
+      { id: 'tip1', title: 'Tip 1', description: 'Desc 1' },
+      { id: 'tip2', title: 'Tip 2', description: 'Desc 2' },
+      { id: 'tip3', title: 'Tip 3', description: 'Desc 3' }
+    ]);
+    expect(section).toContain('Tip 1');
+    expect(section).toContain('Tip 2');
+    expect(section).not.toContain('Tip 3');
+  });
+});
+
+describe('buildLabelSuggestions', () => {
+  test('returns section with no labels for empty array', () => {
+    const section = buildLabelSuggestions([]);
+    expect(section).toContain('Suggested Labels');
+    expect(section).not.toContain('`');
+  });
+
+  test('formats labels with backticks', () => {
+    const section = buildLabelSuggestions(['bug', 'security', 'needs-tests']);
+    expect(section).toContain('Suggested Labels');
+    expect(section).toContain('`bug`');
+    expect(section).toContain('`security`');
+    expect(section).toContain('`needs-tests`');
+  });
+
+  test('separates labels with spaces', () => {
+    const section = buildLabelSuggestions(['a', 'b']);
+    expect(section).toContain('`a` `b`');
+  });
+});
+
+describe('buildRelatedIssues', () => {
+  test('returns section with no links for empty array', () => {
+    const section = buildRelatedIssues([]);
+    expect(section).toContain('Related Issues');
+    expect(section).not.toContain('[');
+  });
+
+  test('builds links for Jira issues', () => {
+    const section = buildRelatedIssues([
+      { id: 'DEV-847', url: 'https://weboo.atlassian.net/browse/DEV-847', type: 'jira' }
+    ]);
+    expect(section).toContain('Related Issues');
+    expect(section).toContain('[DEV-847](https://weboo.atlassian.net/browse/DEV-847)');
+  });
+
+  test('builds links for GitHub issues', () => {
+    const section = buildRelatedIssues([
+      { id: '#123', url: 'https://github.com/Fliplet/repo/issues/123', type: 'github' }
+    ]);
+    expect(section).toContain('[#123](https://github.com/Fliplet/repo/issues/123)');
+  });
+
+  test('handles multiple issues', () => {
+    const section = buildRelatedIssues([
+      { id: 'DEV-100', url: 'https://weboo.atlassian.net/browse/DEV-100', type: 'jira' },
+      { id: 'PS-200', url: 'https://weboo.atlassian.net/browse/PS-200', type: 'jira' }
+    ]);
+    expect(section).toContain('DEV-100');
+    expect(section).toContain('PS-200');
+  });
+});
+
+describe('buildReviewBody with enhanced options', () => {
+  test('handles undefined options parameter gracefully', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null
+    );
+    expect(body).toContain('APPROVED');
+    expect(body).not.toContain('Walkthrough');
+    expect(body).not.toContain('Tips');
+  });
+
+  test('handles null values in options gracefully', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      { fileSummaries: null, tips: null, suggestedLabels: null, relatedIssues: null }
+    );
+    expect(body).toContain('APPROVED');
+    expect(body).not.toContain('Walkthrough');
+    expect(body).not.toContain('Tips');
+    expect(body).not.toContain('Suggested Labels');
+    expect(body).not.toContain('Related Issues');
+  });
+
+  test('handles empty arrays in options without crashing', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      { fileSummaries: [], tips: [], suggestedLabels: [], relatedIssues: [] }
+    );
+    expect(body).toContain('APPROVED');
+    expect(body).not.toContain('Walkthrough');
+    expect(body).not.toContain('Tips');
+    expect(body).not.toContain('Suggested Labels');
+    expect(body).not.toContain('Related Issues');
+  });
+
+  test('includes status badge at top', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      {}
+    );
+    expect(body).toContain('APPROVED');
+  });
+
+  test('includes walkthrough table when provided', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      {
+        fileSummaries: [
+          { path: 'src/app.js', summary: 'Fixed bug' }
+        ]
+      }
+    );
+    expect(body).toContain('Walkthrough');
+    expect(body).toContain('Fixed bug');
+  });
+
+  test('includes tips when provided', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      {
+        tips: [{ id: 't1', title: 'My Tip', description: 'Tip content' }]
+      }
+    );
+    expect(body).toContain('My Tip');
+  });
+
+  test('includes suggested labels when provided', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      {
+        suggestedLabels: ['bug', 'security']
+      }
+    );
+    expect(body).toContain('`bug`');
+    expect(body).toContain('`security`');
+  });
+
+  test('includes related issues when provided', () => {
+    const body = buildReviewBody(
+      { summary: 'Good.', approval: 'approve', comments: [] },
+      null,
+      {
+        relatedIssues: [{ id: 'DEV-847', url: 'https://example.com/DEV-847', type: 'jira' }]
+      }
+    );
+    expect(body).toContain('DEV-847');
+  });
+
+  test('includes all sections in correct order', () => {
+    const body = buildReviewBody(
+      { summary: 'Good code.', approval: 'comment', comments: [{ severity: 'suggestion', path: 'a.js', line: 1, body: 'x' }] },
+      { level: 'medium', affectsRoutes: true },
+      {
+        fileSummaries: [{ path: 'a.js', summary: 'Changed' }],
+        tips: [{ id: 't', title: 'Tip', description: 'desc' }],
+        suggestedLabels: ['label'],
+        relatedIssues: [{ id: 'DEV-1', url: 'http://x', type: 'jira' }]
+      }
+    );
+
+    const walkthroughPos = body.indexOf('Walkthrough');
+    const impactPos = body.indexOf('Platform Impact');
+    const summaryPos = body.indexOf('Good code');
+    const tipsPos = body.indexOf('Tips');
+    const labelsPos = body.indexOf('Suggested Labels');
+    const issuesPos = body.indexOf('Related Issues');
+
+    // Verify order: walkthrough < impact < summary < tips < labels < issues
+    expect(walkthroughPos).toBeLessThan(impactPos);
+    expect(impactPos).toBeLessThan(summaryPos);
+    expect(summaryPos).toBeLessThan(tipsPos);
+    expect(tipsPos).toBeLessThan(labelsPos);
+    expect(labelsPos).toBeLessThan(issuesPos);
   });
 });
