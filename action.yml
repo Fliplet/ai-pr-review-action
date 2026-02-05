@@ -37,6 +37,10 @@ inputs:
     description: 'PR number to review (for workflow_dispatch triggers)'
     required: false
     default: ''
+  min-lines:
+    description: 'Minimum lines changed to trigger a review. Set to 0 to review all PRs regardless of size.'
+    required: false
+    default: '0'
 
 runs:
   using: 'composite'
@@ -77,4 +81,5 @@ runs:
         PR_BASE: ${{ github.event.pull_request.base.ref }}
         AUTO_MODEL_SELECTION: ${{ inputs.auto-model-selection }}
         ENABLE_THINKING: ${{ inputs.enable-thinking }}
+        MIN_LINES: ${{ inputs.min-lines }}
       run: node src/index.js
