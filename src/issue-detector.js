@@ -64,16 +64,16 @@ function detectIssues({ prTitle, prBody, commitMessages, diff, owner, repo }) {
     // Skip invalid ranges
     if (parseInt(number) < 1 || parseInt(number) > 99999) continue;
 
-    // Skip likely CSS color codes:
-    // - 3-digit numbers that could be shorthand hex (#333, #fff → #333)
-    // - 6-digit numbers that could be full hex (#333333)
-    // - Numbers that are all same digit (common in colors: #111, #222, #333, etc.)
-    if (number.length === 3 || number.length === 6) continue;
-    if (/^(\d)\1+$/.test(number)) continue; // all same digit like 333, 666, 999
+    // Skip likely CSS color codes and common non-issue patterns:
+    // - 3-digit numbers (shorthand hex: #333, #abc)
+    // - 4-digit numbers (ports, error codes, rgba shorthand)
+    // - 6-digit numbers (full hex: #333333, #abcdef)
+    // - Numbers with all same digit (#111, #9999)
+    if (number.length <= 4 || number.length === 6) continue;
+    if (/^(\d)\1+$/.test(number)) continue;
 
-    // Skip small numbers commonly used in CSS/code contexts
-    // (line numbers, array indices, etc. under 10)
-    if (parseInt(number) < 10) continue;
+    // Skip numbers under 100 (line numbers, indices, small constants)
+    if (parseInt(number) < 100) continue;
 
     if (!issues.has(id) && owner && repo) {
       issues.set(id, {
