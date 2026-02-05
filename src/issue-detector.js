@@ -54,14 +54,26 @@ function detectIssues({ prTitle, prBody, commitMessages, diff, owner, repo }) {
 
   // Detect GitHub issues (#123)
   // Only match standalone # references, not in URLs or code
+  // IMPORTANT: Skip CSS color codes like #333, #fff, #9888
   const ghIssuePattern = /(?:^|[^\w/])#(\d+)\b/gm;
 
   while ((match = ghIssuePattern.exec(sources)) !== null) {
     const number = match[1];
     const id = `#${number}`;
 
-    // Skip if it looks like it might be a color code or PR reference in a URL
+    // Skip invalid ranges
     if (parseInt(number) < 1 || parseInt(number) > 99999) continue;
+
+    // Skip likely CSS color codes:
+    // - 3-digit numbers that could be shorthand hex (#333, #fff → #333)
+    // - 6-digit numbers that could be full hex (#333333)
+    // - Numbers that are all same digit (common in colors: #111, #222, #333, etc.)
+    if (number.length === 3 || number.length === 6) continue;
+    if (/^(\d)\1+$/.test(number)) continue; // all same digit like 333, 666, 999
+
+    // Skip small numbers commonly used in CSS/code contexts
+    // (line numbers, array indices, etc. under 10)
+    if (parseInt(number) < 10) continue;
 
     if (!issues.has(id) && owner && repo) {
       issues.set(id, {

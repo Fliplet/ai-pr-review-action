@@ -109,6 +109,14 @@ If no issues found, set approval to "approve" with a brief positive note.
 
 IMPORTANT: Only comment on actual issues. Do not create false positives. If the code looks correct, approve it.
 
+CRITICAL CONTEXT LIMITATIONS - Read carefully:
+- You can only see the files included in this PR diff and any full file context provided below
+- You CANNOT see other files in the repository (e.g., model definitions, utility modules)
+- DO NOT claim an import is "unused" unless you can verify it's not used anywhere in the full file content provided
+- DO NOT claim a method is "undefined" if it might be defined in another file (e.g., Sequelize model methods)
+- When you cannot verify something due to missing context, say "Unable to verify - may be defined in [file/module]" instead of flagging as critical
+- Sequelize models have instance methods defined in their model files - if you see app.someMethod(), the method likely exists in models/app.js
+
 For each comment, provide:
 - The exact file path from the diff
 - The line number in the NEW file (from + lines in the diff)
@@ -475,10 +483,16 @@ function buildUserPrompt({ standards, repoStandards, diff, prTitle, prBody, prBa
 
   // Insert full file context before the diff when available
   if (fullFileContext) {
-    prompt += '\n## Full File Context (for critical files)\n\n';
-    prompt += 'The following shows the complete source of key files to help you understand the broader context of the changes:\n\n';
+    prompt += '\n## Full File Context (IMPORTANT - use to verify imports/methods)\n\n';
+    prompt += 'The following shows the complete source of modified files from the PR HEAD branch.\n';
+    prompt += 'USE THIS to verify if imports are actually used and if methods are actually called.\n';
+    prompt += 'DO NOT claim "unused import" or "undefined method" unless you can verify against this full context.\n\n';
     prompt += fullFileContext;
     prompt += '\n';
+  } else {
+    prompt += '\n## Context Limitation Warning\n\n';
+    prompt += 'Full file content was not provided. You only see diff hunks.\n';
+    prompt += 'Be VERY conservative about "unused import" or "undefined method" claims.\n\n';
   }
 
   prompt += '\n## Diff\n\n';

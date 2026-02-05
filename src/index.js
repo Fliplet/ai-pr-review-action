@@ -110,15 +110,16 @@ async function run() {
     console.log(`Model (default): ${selectedModel}`);
   }
 
-  // --- Full file context for critical files ---
+  // --- Full file context for modified files (from PR HEAD, not base) ---
+  // Always fetch full context to avoid false positives about unused imports
+  // or undefined methods that exist elsewhere in the file
   let fullFileContext = '';
   let fullContextTokens = 0;
-  if (complexityScore >= FULL_CONTEXT_SCORE_THRESHOLD) {
-    fullFileContext = await fetchFullFileContext(octokit, owner, repo, prBase, reviewableFiles);
-    fullContextTokens = estimateTokens(fullFileContext);
-    if (fullContextTokens > 0) {
-      console.log(`Full file context: ${fullContextTokens} estimated tokens`);
-    }
+  const prHeadRef = process.env.PR_HEAD_REF || `refs/pull/${prNumber}/head`;
+  fullFileContext = await fetchFullFileContext(octokit, owner, repo, prHeadRef, reviewableFiles);
+  fullContextTokens = estimateTokens(fullFileContext);
+  if (fullContextTokens > 0) {
+    console.log(`Full file context: ${fullContextTokens} estimated tokens (from PR HEAD)`);
   }
 
   // Reduce diff budget proportionally when full context is included
@@ -264,19 +265,16 @@ async function run() {
 }
 
 /**
- * Fetch full file content for critical files via GitHub API.
+ * Fetch full file content for reviewable files via GitHub API.
+ * Fetches from PR HEAD to show current state, not base state.
  * Returns formatted context string, or empty string if none qualify.
  */
 async function fetchFullFileContext(octokit, owner, repo, ref, files) {
-  // Identify files that qualify for full context
+  // Fetch full context for ALL reviewable JS files to avoid false positives
+  // about unused imports or undefined methods that exist in other parts of the file
   const candidates = files
-    .filter(f => {
-      const isSecurity = SECURITY_SENSITIVE_PATTERNS.some(p => p.test(f.path));
-      const manyHunks = f.hunks && f.hunks.length >= FULL_CONTEXT_MIN_HUNKS;
-      const manyChanges = (f.additions + f.deletions) >= FULL_CONTEXT_MIN_CHANGES;
-      return isSecurity || manyHunks || manyChanges;
-    })
-    .slice(0, FULL_CONTEXT_MAX_FILES);
+    .filter(f => /\.(js|ts|jsx|tsx)$/.test(f.path) && f.status !== 'deleted')
+    .slice(0, FULL_CONTEXT_MAX_FILES * 2); // Allow more files for accurate context
 
   if (candidates.length === 0) return '';
 

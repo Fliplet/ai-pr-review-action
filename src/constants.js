@@ -21,7 +21,11 @@ const SECURITY_SENSITIVE_PATTERNS = [
   /crypt/i,
   /sanitiz/i,
   /valid/i,
-  /login/i
+  /login/i,
+  /\.pug$/i,      // Template files can contain XSS vulnerabilities
+  /\.ejs$/i,      // EJS templates
+  /\.hbs$/i,      // Handlebars templates
+  /views\//i      // View directories
 ];
 
 // Core application files that are high-impact

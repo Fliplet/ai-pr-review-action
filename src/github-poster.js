@@ -34,6 +34,58 @@ async function hasExistingReview(octokit, owner, repo, prNumber, commitSha) {
 }
 
 /**
+ * Dismiss previous bot reviews to avoid conflicting verdicts.
+ * Only dismisses APPROVED or CHANGES_REQUESTED reviews (not COMMENT).
+ */
+async function dismissPreviousBotReviews(octokit, owner, repo, prNumber) {
+  let page = 1;
+  const perPage = 100;
+  const dismissed = [];
+
+  while (true) {
+    const { data: reviews } = await octokit.pulls.listReviews({
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: perPage,
+      page
+    });
+
+    for (const review of reviews) {
+      // Only dismiss bot reviews that have a verdict (APPROVED or CHANGES_REQUESTED)
+      const isBotReview = review.user && review.user.login === 'github-actions[bot]' &&
+        review.body && review.body.includes('AI Code Review');
+      const hasVerdict = review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED';
+
+      if (isBotReview && hasVerdict) {
+        try {
+          await octokit.pulls.dismissReview({
+            owner,
+            repo,
+            pull_number: prNumber,
+            review_id: review.id,
+            message: 'Superseded by new AI review on latest commit.'
+          });
+          dismissed.push(review.id);
+        } catch (err) {
+          // May fail if review is already dismissed or PR is merged
+          console.warn(`Could not dismiss review ${review.id}: ${err.message}`);
+        }
+      }
+    }
+
+    if (reviews.length < perPage) break;
+    page++;
+  }
+
+  if (dismissed.length > 0) {
+    console.log(`Dismissed ${dismissed.length} previous bot review(s)`);
+  }
+
+  return dismissed;
+}
+
+/**
  * Post a review to the PR via GitHub API.
  * Accepts a shared Octokit instance to avoid redundant instantiation.
  * Checks for duplicate reviews before posting.
@@ -49,6 +101,10 @@ async function postReview({ octokit, owner, repo, prNumber, review, reviewMode, 
     console.log(`Commit ${commitId.slice(0, 7)} already reviewed. Skipping.`);
     return { event: 'SKIPPED', commentCount: 0 };
   }
+
+  // Dismiss previous bot reviews to avoid conflicting verdicts
+  // (e.g., showing both APPROVED and CHANGES_REQUESTED on the same PR)
+  await dismissPreviousBotReviews(octokit, owner, repo, prNumber);
 
   // Determine the event type
   let event = mapApprovalToEvent(review.approval, reviewMode);
@@ -360,6 +416,7 @@ function formatCommentsAsBody(comments) {
 module.exports = {
   postReview,
   hasExistingReview,
+  dismissPreviousBotReviews,
   mapApprovalToEvent,
   buildReviewBody,
   buildReviewComments,
