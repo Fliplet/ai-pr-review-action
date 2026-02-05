@@ -13,7 +13,7 @@ const { generateTips } = require('./tips-generator');
 const { detectIssues } = require('./issue-detector');
 const { MODELS, MODEL_PRICING, SECURITY_SENSITIVE_PATTERNS } = require('./constants');
 
-const MIN_CHANGES_THRESHOLD = 5;
+const DEFAULT_MIN_CHANGES_THRESHOLD = 0;
 const TRIAGE_TOKEN_MULTIPLIER = 1.5;
 const TRIAGE_MIN_FILES = 5;
 const FULL_CONTEXT_SCORE_THRESHOLD = 30;
@@ -32,6 +32,7 @@ async function run() {
   const autoModelSelection = (process.env.AUTO_MODEL_SELECTION || 'true') === 'true';
   const enableThinking = process.env.ENABLE_THINKING || 'auto';
   const explicitModel = process.env.CLAUDE_MODEL;
+  const minChangesThreshold = parseInt(process.env.MIN_LINES, 10) || DEFAULT_MIN_CHANGES_THRESHOLD;
 
   if (!prNumber || isNaN(prNumber)) {
     console.log('No PR number provided. Skipping review.');
@@ -79,10 +80,10 @@ async function run() {
     return;
   }
 
-  // Check minimum changes threshold
+  // Check minimum changes threshold (skip if threshold is 0)
   const totalChanges = getTotalChanges(reviewableFiles);
-  if (totalChanges < MIN_CHANGES_THRESHOLD) {
-    console.log(`Only ${totalChanges} line(s) changed. Below threshold of ${MIN_CHANGES_THRESHOLD}. Skipping.`);
+  if (minChangesThreshold > 0 && totalChanges < minChangesThreshold) {
+    console.log(`Only ${totalChanges} line(s) changed. Below threshold of ${minChangesThreshold}. Skipping.`);
     return;
   }
 
